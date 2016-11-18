@@ -11,3 +11,5 @@ target_include_directories(civetweb_common_objs PRIVATE
 
 set(myhttpd_srcs m.c $<TARGET_OBJECTS:civetweb_common_objs>)
 add_executable(myhttpd ${myhttpd_srcs})
+target_include_directories(myhttpd PRIVATE
+	"${CMAKE_BINARY_DIR}/src/include/civetweb")
