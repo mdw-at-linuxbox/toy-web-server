@@ -51,6 +51,7 @@ append_postdata(struct mybufs **postdata, char *buf, int len)
 	}
 	for (; len; buf += c, len -= c) {
 		thisp = malloc(sizeof *thisp);
+		memset(thisp, 0, sizeof *thisp);
 		c = len;
 		if (c > sizeof thisp->data) c = sizeof thisp->data;
 		memcpy(thisp->data, buf, c);
@@ -149,15 +150,18 @@ my_get_response_code_text(int status)
 	}
 }
 
-void
-escape_html_characters(char *buf, int len, const char *cp)
+int
+escape_html_characters2(char *buf, int len, const char *cp, int clen)
 {
 	int c, l;
 	char cbuf[4];
 	char *tp;
+	int r;
 
-	if (!len) return;
-	while (c = *cp++) {
+	if (!len) return 0;
+	r = 0;
+	for (;clen;--clen) {
+		c = *cp++;
 		switch(c) {
 		case '<': tp = "&lt;"; break;
 		case '>': tp = "&gt;"; break;
@@ -168,17 +172,24 @@ escape_html_characters(char *buf, int len, const char *cp)
 			tp = cbuf;
 		}
 		l = strlen(tp);
-		if (l > len) l = len;
+		if (l > (len-1)) {
+			break;
+		}
+		++r;
 		memcpy(buf, tp, l);
 		buf += l;
 		len -= l;
 		if (len < 1) break;
 	}
-	if (!len) {
-		--buf;
-	}
 	--len;
 	buf[len] = 0;
+	return r;
+}
+
+int
+escape_html_characters(char *buf, int len, const char *cp)
+{
+	return escape_html_characters2(buf, len, cp, strlen(cp));
 }
 
 int
@@ -210,7 +221,7 @@ printenv(struct mg_connection *conn,
 			ntohs(((struct sockaddr_in*)lsa)->sin_port));
 		break;
 	}
-	append_postdata_format(&output, "REQUEST_METHOD=%d\r\n",
+	append_postdata_format(&output, "REQUEST_METHOD=%s\r\n",
 		req_info->request_method);
 	append_postdata_format(&output, "REMOTE_PORT=%d\r\n",
 		req_info->remote_port);
@@ -229,6 +240,20 @@ printenv(struct mg_connection *conn,
 	}
 	append_postdata_format(&output, "</pre>\r\n");
 	if (postdata) {
+		int sofar = 0;
+		struct mybufs *thisp;
+		for (thisp = postdata; thisp; thisp = thisp->next) {
+			int r, s;
+			s = 0;
+			while (s < thisp->len) {
+				r = escape_html_characters2(tempbuf, sizeof tempbuf,
+					thisp->data + s, thisp->len - s);
+				if (!r) break;
+				s += r;
+				append_postdata_format(&output, "%s", tempbuf);
+			}
+			sofar += thisp->len;
+		}
 	}
 	append_postdata_format(&output, "</body>\r\n");
 	append_postdata_format(&output, "</html>\r\n");
@@ -245,6 +270,8 @@ printenv(struct mg_connection *conn,
 	append_postdata_format(&headers, "\r\n");
 	copy_postdata_to_mg(conn, headers);
 	copy_postdata_to_mg(conn, output);
+	free_postdata(output);
+	free_postdata(headers);
 	free_postdata(postdata);
 	return status;
 }
@@ -256,7 +283,7 @@ my_begin_request(struct mg_connection *conn)
 	struct myhttpd_data *me = (struct myhttpd_data*)(req_info->user_data);
 	int i;
 	char const *cl = 0;
-	struct mybufs *postdata, **nextp, *thisp;
+	struct mybufs *postdata;
 
 	fprintf (stdout, "method: %s\n", req_info->request_method);
 	fprintf (stdout, "uri: %s\n", req_info->uri);
@@ -273,32 +300,21 @@ my_begin_request(struct mg_connection *conn)
 	}
 	postdata = 0;
 	if (!strcmp(req_info->request_method, "POST")) {
-		nextp = &postdata;
 		char *ep = 0;
 		int c, totlen, sofar;
 		totlen = cl ? strtol(cl, &ep, 0) : -1;
 		if (cl)
 			fprintf(stdout, "reading content: %d\n", totlen);
 		for (sofar = 0;;sofar += c) {
-			thisp = malloc(sizeof *thisp);
-			thisp->next = 0;
-			thisp->len = 0;
-			*nextp = thisp;
-			if (totlen >= 0 && sofar >= totlen) break;
-			c = totlen - sofar;
-			if (c > sizeof thisp->data) c = sizeof thisp->data;
-			c = mg_read(conn, thisp->data, c);
-			if (c <= 0) {
-				*nextp = 0;
-				free(thisp);
-				break;
-			}
-			thisp->len = c;
-			nextp = &thisp->next;
+			char buf[500];
+			c = mg_read(conn, buf, sizeof buf);
+			if (c <= 0) break;
+			append_postdata(&postdata,  buf, c);
 		}
 	}
 	if (postdata) {
 		int sofar = 0;
+		struct mybufs *thisp;
 		for (thisp = postdata; thisp; thisp = thisp->next) {
 			fprintf (stdout, "dt%d-%d: %.*s\n",
 				sofar, sofar+thisp->len,
