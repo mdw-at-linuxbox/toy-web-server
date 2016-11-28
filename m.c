@@ -9,17 +9,9 @@
 
 #include "civetweb.h"
 
+#include "p.h"
+
 char *zxid_conf = "zxid.conf";
-
-struct myhttpd_data {
-	int dummy;
-};
-
-struct mybufs {
-	struct mybufs *next;
-	char data[1024];
-	int len;
-};
 
 int rc;
 
@@ -96,6 +88,22 @@ copy_postdata_to_mg(struct mg_connection *conn, struct mybufs *postdata)
 	for (thisp = postdata; thisp; thisp = thisp->next) {
 		r = mg_write(conn, thisp->data, thisp->len);
 		if (r <= 0) break;
+	}
+}
+
+void copy_postdata_to_buf(char *buf, int buflen, struct mybufs *postdata)
+{
+	int sofar = 0;
+	struct mybufs *thisp;
+	int r;
+	int l;
+	for (thisp = postdata; thisp; thisp = thisp->next) {
+		if (!buflen) break;
+		l = buflen;
+		if (l > thisp->len) l = thisp->len;
+		memcpy(buf, thisp->data, l);
+		buf += l;
+		buflen -= l;
 	}
 }
 
@@ -183,8 +191,8 @@ escape_html_characters2(char *buf, int len, const char *cp, int clen)
 		len -= l;
 		if (len < 1) break;
 	}
-	--len;
-	buf[len] = 0;
+	if (!len) --buf;
+	*buf = 0;
 	return r;
 }
 
@@ -278,14 +286,37 @@ printenv(struct mg_connection *conn,
 	return status;
 }
 
+void
+read_postdata(struct mybufs **outp, struct mg_connection *conn)
+{
+	struct mg_request_info const *req_info = mg_get_request_info(conn);
+	int i;
+	char const *cl = 0;
+	for (i = 0; i < req_info->num_headers; ++i) {
+		if (!strncasecmp("content-length",
+				req_info->http_headers[i].name, 14))
+			cl = req_info->http_headers[i].value;
+	}
+	char *ep = 0;
+	int c, totlen, sofar;
+	totlen = cl ? strtol(cl, &ep, 0) : -1;
+	if (cl)
+		fprintf(stdout, "reading content: %d\n", totlen);
+	for (sofar = 0;;sofar += c) {
+		char buf[500];
+		c = mg_read(conn, buf, sizeof buf);
+		if (c <= 0) break;
+		append_postdata(outp,  buf, c);
+	}
+}
+
 int
 my_begin_request(struct mg_connection *conn)
 {
 	struct mg_request_info const *req_info = mg_get_request_info(conn);
 	struct myhttpd_data *me = (struct myhttpd_data*)(req_info->user_data);
 	int i;
-	char const *cl = 0;
-	struct mybufs *postdata;
+	struct mybufs *postdata = 0;
 
 	fprintf (stdout, "method: %s\n", req_info->request_method);
 	fprintf (stdout, "uri: %s\n", req_info->uri);
@@ -293,27 +324,14 @@ my_begin_request(struct mg_connection *conn)
 		fprintf (stdout, "qs: %s\n", req_info->query_string);
 	fprintf (stdout, "user: %s\n", req_info->remote_user);
 	for (i = 0; i < req_info->num_headers; ++i) {
-		if (!strncasecmp("content-length",
-				req_info->http_headers[i].name, 14))
-			cl = req_info->http_headers[i].value;
 		fprintf (stdout, "hd%d: %s=%s\n", i,
 			req_info->http_headers[i].name,
 			req_info->http_headers[i].value);
 	}
-	postdata = 0;
 	if (!strcmp(req_info->request_method, "POST")) {
-		char *ep = 0;
-		int c, totlen, sofar;
-		totlen = cl ? strtol(cl, &ep, 0) : -1;
-		if (cl)
-			fprintf(stdout, "reading content: %d\n", totlen);
-		for (sofar = 0;;sofar += c) {
-			char buf[500];
-			c = mg_read(conn, buf, sizeof buf);
-			if (c <= 0) break;
-			append_postdata(&postdata,  buf, c);
-		}
+		read_postdata(&postdata, conn);
 	}
+	zxid_mini_httpd_filter(cf, conn, postdata, &ses);
 	if (postdata) {
 		int sofar = 0;
 		struct mybufs *thisp;
@@ -324,8 +342,13 @@ my_begin_request(struct mg_connection *conn)
 			sofar += thisp->len;
 		}
 	}
-	if (!strcmp(req_info->uri, "/test-sp/printenv")) {
-		return printenv(conn, req_info, postdata);
+	if (!memcmp(req_info->uri, "/test-sp/printenv", 17)) {
+		switch (req_info->uri[17]) {
+		case '/': case 0:
+			return printenv(conn, req_info, postdata);
+		default:
+			break;
+		}
 	}
 	free_postdata(postdata);
 	return 0;

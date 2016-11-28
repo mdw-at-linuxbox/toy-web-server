@@ -1,2 +1,2 @@
-zxid_ses* zxid_mini_httpd_filter(zxid_conf*, const char*, const char*,
-const char*, const char*);
+int zxid_mini_httpd_filter(zxid_conf*, struct mg_connection *,
+	struct mybufs *, zxid_ses **);
