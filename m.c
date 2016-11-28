@@ -9,6 +9,8 @@
 
 #include "civetweb.h"
 
+char *zxid_conf = "zxid.conf";
+
 struct myhttpd_data {
 	int dummy;
 };
@@ -349,8 +351,7 @@ struct mg_callbacks cb[1] = {{
 	log_access: my_log_access,
 }};
 
-int
-main(int ac, char **av)
+int process()
 {
 	struct mg_context *ctx;
 	struct myhttpd_data ud[1];
@@ -368,5 +369,11 @@ main(int ac, char **av)
 	for (;;) {
 		pause();
 	}
-	exit(rc);
+	return rc;
+}
+
+int
+main(int ac, char **av)
+{
+	exit(process());
 }
