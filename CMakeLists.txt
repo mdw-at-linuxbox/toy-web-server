@@ -4,6 +4,13 @@ project(myhttpd)
 include(GNUInstallDirs)
 find_package(Threads REQUIRED)
 
+set(zxid_include "/home/mdw/t/k/usr/local/include")
+#set(zxid_lib "/home/mdw/t/k/usr/local/lib64/libzxid.a")
+
+add_library(zxid STATIC IMPORTED)
+set_property(TARGET zxid
+	PROPERTY IMPORTED_LOCATION "/home/mdw/t/k/usr/local/lib64/libzxid.a")
+
 set(civetweb_common_files civetweb/src/civetweb.c)
 add_library(civetweb_common_objs OBJECT ${civetweb_common_files})
 target_include_directories(civetweb_common_objs PRIVATE
@@ -12,12 +19,14 @@ set_property(TARGET civetweb_common_objs
 	APPEND PROPERTY COMPILE_DEFINITIONS
 		USE_IPV6=1 NO_SSL_DL=1)
 
-set(myhttpd_srcs m.c $<TARGET_OBJECTS:civetweb_common_objs>)
+set(myhttpd_srcs m.c z.c $<TARGET_OBJECTS:civetweb_common_objs>)
 add_executable(myhttpd ${myhttpd_srcs})
 target_include_directories(myhttpd PRIVATE
+	"${zxid_include}"
 	"${CMAKE_SOURCE_DIR}/civetweb/include")
 target_link_libraries(myhttpd ${CMAKE_THREAD_LIBS_INIT}
-	ssl crypto)
+	zxid
+	curl ssl crypto z)
 
 #refs,
 #[threads]
