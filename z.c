@@ -127,7 +127,7 @@ zxid_mini_httpd_filter(zxid_conf * cf,
 	char *request_data = 0;
 	int request_data_len = -1;
 	int r;
-	const char *cookie_hdr;
+	const char *cookie_hdr = 0;
 	int i;
 
 	*sessp = ses;
@@ -207,6 +207,7 @@ zxid_mini_httpd_process_zxid_simple_outcome(cf, conn,
 			cookie_hdr);
 	}
 	// note: zxid_is_wsp == do zxid_mini_httpd_wsp_response
+fprintf (stderr,"ha! got here!\n");
 	if (zx_match(cf->wsp_pat, uri_path)) {
 	}
 	// zxid_mini_httpd_wsp

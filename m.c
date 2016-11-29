@@ -10,8 +10,20 @@
 #include "civetweb.h"
 
 #include "p.h"
+#include <openssl/evp.h>
+#include "zx/zxid.h"
+#include "z.h"
 
-char *zxid_conf = "zxid.conf";
+struct myhttpd_data {
+	int foo;
+};
+
+struct myconn_data {
+	zxid_ses *ses;
+	zxid_conf *cf;
+};
+
+char *zxid_confstr = "PATH=/tmp/zxid/&DEBUG=1";
 
 int rc;
 
@@ -205,6 +217,7 @@ escape_html_characters(char *buf, int len, const char *cp)
 int
 printenv(struct mg_connection *conn,
 	struct mg_request_info const *req_info,
+	struct myconn_data *cdata,
 	struct mybufs *postdata)
 {
 	struct mybufs *output = 0, *headers = 0;
@@ -317,6 +330,21 @@ my_begin_request(struct mg_connection *conn)
 	struct myhttpd_data *me = (struct myhttpd_data*)(req_info->user_data);
 	int i;
 	struct mybufs *postdata = 0;
+	zxid_ses *ses;
+	struct myconn_data *cdata;
+	void *p;
+	p = mg_get_user_connection_data(conn);
+	if (p) {
+		cdata = (struct myconn_data *) p;
+	} else {
+		cdata = malloc(sizeof *cdata);
+		memset(cdata, 0, sizeof *cdata);
+		mg_set_user_connection_data(conn, cdata);
+	}
+
+	if (!cdata->cf) {
+		cdata->cf = zxid_new_conf_to_cf(zxid_confstr);
+	}
 
 	fprintf (stdout, "method: %s\n", req_info->request_method);
 	fprintf (stdout, "uri: %s\n", req_info->uri);
@@ -331,7 +359,7 @@ my_begin_request(struct mg_connection *conn)
 	if (!strcmp(req_info->request_method, "POST")) {
 		read_postdata(&postdata, conn);
 	}
-	zxid_mini_httpd_filter(cf, conn, postdata, &ses);
+	zxid_mini_httpd_filter(cdata->cf, conn, postdata, &cdata->ses);
 	if (postdata) {
 		int sofar = 0;
 		struct mybufs *thisp;
@@ -345,7 +373,7 @@ my_begin_request(struct mg_connection *conn)
 	if (!memcmp(req_info->uri, "/test-sp/printenv", 17)) {
 		switch (req_info->uri[17]) {
 		case '/': case 0:
-			return printenv(conn, req_info, postdata);
+			return printenv(conn, req_info, cdata, postdata);
 		default:
 			break;
 		}
@@ -368,10 +396,25 @@ my_log_access(const struct mg_connection *conn, const char *buf)
 	return 0;
 }
 
+void
+my_close_connection(const struct mg_connection *conn)
+{
+	void *p;
+	struct myconn_data *cdata;
+	p = mg_get_user_connection_data(conn);
+	mg_set_user_connection_data(conn, NULL);
+	cdata = (struct myconn_data *) p;
+	if (cdata) {
+		free(cdata);
+	}
+	
+}
+
 struct mg_callbacks cb[1] = {{
 	begin_request: my_begin_request,
 	log_message: my_log_message,
 	log_access: my_log_access,
+	connection_close: my_close_connection,
 }};
 
 int process()
@@ -395,8 +438,32 @@ int process()
 	return rc;
 }
 
+char usage[] = "Usage: myhttpd [-z confstr]\n";
+
 int
 main(int ac, char **av)
 {
+	char *ap;
+
+	while (--ac) if(*(ap = *++av) == '-')
+	while (*++ap) switch(*ap)
+	{
+	case 'z':
+		if (ac < 1) {
+			fprintf(stderr,"myhttpd: -z: missing option\n");
+		}
+		--ac;
+		zxid_confstr = *++av;
+	case '-':
+		break;
+	default:
+		fprintf(stderr,"myhttpd: Bad option: %c\n", *ap);
+	Usage:
+		fprintf(stderr,"%s", usage);
+		exit(1);
+	} else {
+		fprintf(stderr, "myhttpd: Unknown extra argument: %s\n", ap);
+		goto Usage;
+	}
 	exit(process());
 }

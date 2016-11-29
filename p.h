@@ -1,7 +1,3 @@
-struct myhttpd_data {
-	int dummy;
-};
-
 struct mybufs {
 	struct mybufs *next;
 	char data[1024];
