@@ -117,7 +117,7 @@ zxid_mini_httpd_filter(zxid_conf * cf,
 	struct mg_request_info const *req_info = mg_get_request_info(conn);
 	zxid_ses *ses = zxid_alloc_ses(cf);
 	zxid_cgi cgi[1];
-	int len, qs_len;
+	int len, qs_len, uri_len;
 	int request_url_len;
 	char *cp;
 	char *request_url;
@@ -175,8 +175,8 @@ zxid_mini_httpd_filter(zxid_conf * cf,
 	if (cp == request_url)
 		cp = request_url + request_url_len;
 	request_url_len = cp - request_url;
-	len = strlen(uri_path);
-	if (len == request_url_len && !memcmp(request_url, uri_path, len)) {
+	uri_len = strlen(uri_path);
+	if (uri_len == request_url_len && !memcmp(request_url, uri_path, uri_len)) {
 		if (*method == 'P') {
 			request_data_len = zxid_mini_httpd_read_post(postdata,
 				&request_data);
@@ -213,4 +213,24 @@ fprintf (stderr,"ha! got here!\n");
 	// zxid_mini_httpd_wsp
 	// zxid_mini_httpd_uma
 	// zxid_mini_httpd_sso
+	if (zx_match(cf->sso_pat, uri_path)) {
+		if (!qs || *qs != 'l') {
+			cgi->op = 'E';
+		}
+		if (cgi->sid && cgi->sid[0] && zxid_get_ses(cf, ses, cgi->sid)) {
+			request_data = zxid_simple_ses_active_cf(cf, cgi,
+				ses, 0, AUTO_FLAGS);
+			if (request_data) {
+				return
+zxid_mini_httpd_process_zxid_simple_outcome(cf, conn,
+					ses, uri_path, cookie_hdr,
+					request_data);
+			}
+		}
+		return zxid_mini_httpd_step_up(cf, conn, cgi, ses, uri_path,
+			cookie_hdr);
+	} else {
+fprintf (stderr,"sso_path=<%s> uri_path=<%s>: no match\n", cf->sso_pat, uri_path);
+		return 0;
+	}
 }

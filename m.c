@@ -23,7 +23,7 @@ struct myconn_data {
 	zxid_conf *cf;
 };
 
-char *zxid_confstr = "PATH=/tmp/zxid/&DEBUG=1";
+char *zxid_confstr = "PATH=/tmp/zxid/&SSO_PAT=**&DEBUG=1";
 
 int rc;
 
