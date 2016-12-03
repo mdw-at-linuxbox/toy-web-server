@@ -359,7 +359,6 @@ my_begin_request(struct mg_connection *conn)
 	if (!strcmp(req_info->request_method, "POST")) {
 		read_postdata(&postdata, conn);
 	}
-	zxid_mini_httpd_filter(cdata->cf, conn, postdata, &cdata->ses);
 	if (postdata) {
 		int sofar = 0;
 		struct mybufs *thisp;
@@ -369,6 +368,10 @@ my_begin_request(struct mg_connection *conn)
 				thisp->len, thisp->data);
 			sofar += thisp->len;
 		}
+	}
+	i = zxid_mini_httpd_filter(cdata->cf, conn, postdata, &cdata->ses);
+	if (i) {
+		return i;
 	}
 	if (!memcmp(req_info->uri, "/test-sp/printenv", 17)) {
 		switch (req_info->uri[17]) {
