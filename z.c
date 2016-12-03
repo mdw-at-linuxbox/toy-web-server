@@ -50,23 +50,68 @@ zxid_mini_httpd_process_zxid_simple_outcome(zxid_conf *cf,
 {
 	struct mybufs *output = 0, *headers = 0;
 	int status;
+	char *content_type = 0;
+	char *p, *ep;
+	int content_type_len, request_data_len;
 	char timebuf[80];
 
 	my_gmt_time_string(timebuf, sizeof timebuf, NULL);
 
-// XXX something goes here
-	status = 501;
+	if (cookie_hdr && *cookie_hdr)
+		append_postdata_format(&headers, "Set-Cookie: %s\r\n", cookie_hdr);
+	switch(*request_data) {
+	case 'L':
+		status = 302;
+		append_postdata_format(&output, "SAML Redirect\r\n");
+		if (ses->setcookie) {
+			append_postdata_format(&headers, "Set-Cookie: %s\r\n", ses->setcookie);
+		}
+		if (ses->setptmcookie) {
+			append_postdata_format(&headers, "Set-Cookie: %s\r\n", ses->setptmcookie);
+		}
+		break;
+	case 'C':
+		fprintf(stderr,"request_data - case C: %s\n", request_data);
+		content_type = request_data;
+		request_data += 14;	/* "skip Content-Type:" */
+		p = strchr(request_data, '\r');
+		if (!p) goto E501;
+		p += 2;
+		content_type_len = p - content_type;
+		p += 16;		/* "skip Content-Length:" */
+fprintf(stderr,"About to strtol: %.8s\n", p);
+		request_data_len = strtol(p, &ep, 10);
+		request_data = strchr(p, '\r');
+		if (!request_data)
+			goto E501;
+		request_data += 4;	/* skip \r\n\r\n */
+		append_postdata(&output, request_data, request_data_len);
+		status = 200;
+		break;
+	case 'z':
+		fprintf(stderr,"request_data - case z: %s\n", request_data);
+		goto E501;
+	E501:
+	default:
+		content_type = 0;
+		status = 501;
+		append_postdata_format(&output, "Server Fault\r\n");
+	}
 
-	append_postdata_format(&output,
-"zxid_mini_httpd_process_zxid_simple_outcome: Not yet implemented\r\n");
 	append_postdata_format(&headers, "HTTP/1.1 %d %s\r\n",
 		status,
 		my_get_response_code_text(status));
 	append_postdata_format(&headers, "Date: %s\r\n", timebuf);
 	append_postdata_format(&headers, "Content-Length: %d\r\n",
 		compute_postdata_len(output));
-	append_postdata_format(&headers, "Content-Type: %s\r\n",
-		"text/plain");
+	if (content_type) {
+fprintf(stderr,"Custom content_type: %d<%.*s>\n",
+content_type_len, content_type_len, content_type);
+		append_postdata(&headers, content_type, content_type_len);
+	} else {
+		append_postdata_format(&headers, "Content-Type: %s\r\n",
+			"text/plain");
+	}
 	append_postdata_format(&headers, "\r\n");
 	copy_postdata_to_mg(conn, headers);
 	copy_postdata_to_mg(conn, output);
@@ -81,31 +126,14 @@ zxid_mini_httpd_step_up(zxid_conf *cf,
 	zxid_cgi *cgi, zxid_ses *ses,
 	const char *uri_path, const char *cookie_hdr)
 {
-	struct mybufs *output = 0, *headers = 0;
-	int status;
-	char timebuf[80];
+	char *request_data;
 
-	my_gmt_time_string(timebuf, sizeof timebuf, NULL);
-
-// XXX something goes here
-	status = 501;
-
-	append_postdata_format(&output,
-"zxid_mini_httpd_step_up: Not yet implemented\r\n");
-	append_postdata_format(&headers, "HTTP/1.1 %d %s\r\n",
-		status,
-		my_get_response_code_text(status));
-	append_postdata_format(&headers, "Date: %s\r\n", timebuf);
-	append_postdata_format(&headers, "Content-Length: %d\r\n",
-		compute_postdata_len(output));
-	append_postdata_format(&headers, "Content-Type: %s\r\n",
-		"text/plain");
-	append_postdata_format(&headers, "\r\n");
-	copy_postdata_to_mg(conn, headers);
-	copy_postdata_to_mg(conn, output);
-	free_postdata(output);
-	free_postdata(headers);
-	return status;
+	if (!ses)	// XXX can this happen?  should it be returned?
+		ses = zxid_alloc_ses(cf);
+	request_data = zxid_simple_no_ses_cf(cf, cgi, ses, 0, AUTO_FLAGS);
+	return zxid_mini_httpd_process_zxid_simple_outcome(cf, conn,
+		ses, uri_path, cookie_hdr,
+		request_data);
 }
 
 int
