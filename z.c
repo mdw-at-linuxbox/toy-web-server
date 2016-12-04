@@ -169,7 +169,7 @@ zxid_mini_httpd_filter(zxid_conf * cf,
 	// zxid_mini_httpd_check_redirect_hack
 	cgi->uri_path = (char *) uri_path;
 	if (!cf->redirect_hack_zxid_qs || !*cf->redirect_hack_zxid_qs)
-		;
+		cgi->qs = (char *) qs;
 	else if (!*qs)
 		cgi->qs = cf->redirect_hack_zxid_qs;
 	else {
@@ -180,8 +180,8 @@ zxid_mini_httpd_filter(zxid_conf * cf,
 		cp[len] = '&';
 		memcpy(cp + len + 1, qs, qs_len + 1);
 		cgi->qs = cp;
+		// XXX check, is qs a leak?
 	}
-	// XXX check, is qs a leak?
 	if (cgi->qs && *cgi->qs) {
 		cp = zx_dup_cstr(cf->ctx, cgi->qs);
 		zxid_parse_cgi(cf, cgi, cp);
@@ -197,8 +197,8 @@ zxid_mini_httpd_filter(zxid_conf * cf,
 			;
 	}
 	request_url = cp;
-	len = strlen(cp);
-	for (cp = request_url + len-1; cp > request_url; --cp)
+	request_url_len = strlen(cp);
+	for (cp = request_url + request_url_len-1; cp > request_url; --cp)
 		if (*cp == '?') break;
 	if (cp == request_url)
 		cp = request_url + request_url_len;
