@@ -216,20 +216,20 @@ zxid_mini_httpd_filter(zxid_conf * cf,
 			}
 		}
 		switch(cgi->op) {
-		case 'L':
-		case 'A':
-			break;
 		default:
 			if (!cgi->sid || !zxid_get_ses(cf, ses, cgi->sid))
 				break;
 			request_data = zxid_simple_ses_active_cf(cf, cgi,
 				ses, 0, AUTO_FLAGS);
-			if (request_data) {
-				return
+			if (!request_data)
+				break;
+			return
 zxid_mini_httpd_process_zxid_simple_outcome(cf, conn,
-					ses, uri_path, cookie_hdr,
-					request_data);
-			}
+				ses, uri_path, cookie_hdr,
+				request_data);
+		case 'L':
+		case 'A':
+			break;
 		}
 		return zxid_mini_httpd_step_up(cf, conn, cgi, ses, uri_path,
 			cookie_hdr);
