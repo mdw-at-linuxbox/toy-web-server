@@ -1,15 +1,20 @@
-cmake_minimum_required(VERSION 2.8.11)
+cmake_minimum_required(VERSION 3.0.2)
 project(myhttpd)
+
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
+"${CMAKE_ROOT}/Modules"
+"${CMAKE_SOURCE_DIR}")
+
+#option(USE_SYSTEM_SSL "Use system OpenSSL" OFF)
+#if(USE_SYSTEM_SSL)
+#endif(USE_SYSTEM_SSL)
+
+find_package(OpenSSL REQUIRED)
+find_package(zxid REQUIRED)
+find_package(CURL REQUIRED)
 
 include(GNUInstallDirs)
 find_package(Threads REQUIRED)
-
-set(zxid_include "/home/mdw/t/k/usr/local/include")
-#set(zxid_lib "/home/mdw/t/k/usr/local/lib64/libzxid.a")
-
-add_library(zxid STATIC IMPORTED)
-set_property(TARGET zxid
-	PROPERTY IMPORTED_LOCATION "/home/mdw/t/k/usr/local/lib64/libzxid.a")
 
 set(civetweb_common_files civetweb/src/civetweb.c)
 add_library(civetweb_common_objs OBJECT ${civetweb_common_files})
@@ -22,11 +27,13 @@ set_property(TARGET civetweb_common_objs
 set(myhttpd_srcs m.c z.c $<TARGET_OBJECTS:civetweb_common_objs>)
 add_executable(myhttpd ${myhttpd_srcs})
 target_include_directories(myhttpd PRIVATE
-	"${zxid_include}"
 	"${CMAKE_SOURCE_DIR}/civetweb/include")
+#	"${ZXID_INCLUDE_DIR}"
+#	"${CURL_INCLUDE_DIRS}"
+#	"${OPENSSL_INCLUDE_DIR}")
 target_link_libraries(myhttpd ${CMAKE_THREAD_LIBS_INIT}
 	zxid
-	curl ssl crypto z)
+	${CURL_LIBRARIES} OpenSSL::SSL OpenSSL::Crypto z)
 
 #refs,
 #[threads]
