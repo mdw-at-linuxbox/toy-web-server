@@ -146,9 +146,9 @@ zxid_mini_httpd_filter(zxid_conf * cf,
 	zxid_ses *ses = zxid_alloc_ses(cf);
 	zxid_cgi cgi[1];
 	int len, qs_len, uri_len;
-	int request_url_len;
+	int burl_url_len;
 	char *cp;
-	char *request_url;
+	char *burl_url;
 	const char *method = req_info->request_method;
 	const char *uri_path = req_info->request_uri;	// or local_url?
 	const char *qs = req_info->query_string;
@@ -196,15 +196,16 @@ zxid_mini_httpd_filter(zxid_conf * cf,
 		for (cp += 3; *cp && *cp != '/'; ++cp)
 			;
 	}
-	request_url = cp;
-	request_url_len = strlen(cp);
-	for (cp = request_url + request_url_len-1; cp > request_url; --cp)
+	burl_url = cp;
+	burl_url_len = strlen(cp);
+	for (cp = burl_url + burl_url_len-1; cp > burl_url; --cp)
 		if (*cp == '?') break;
-	if (cp == request_url)
-		cp = request_url + request_url_len;
-	request_url_len = cp - request_url;
+	if (cp == burl_url)
+		cp = burl_url + burl_url_len;
+	burl_url_len = cp - burl_url;
 	uri_len = strlen(uri_path);
-	if (uri_len == request_url_len && !memcmp(request_url, uri_path, uri_len)) {
+	if (uri_len == burl_url_len && !memcmp(burl_url, uri_path, uri_len)) {
+fprintf (stderr,"matching zxid pseudo node\n");
 		if (*method == 'P') {
 			request_data_len = zxid_mini_httpd_read_post(postdata,
 				&request_data);
@@ -234,6 +235,7 @@ zxid_mini_httpd_process_zxid_simple_outcome(cf, conn,
 		return zxid_mini_httpd_step_up(cf, conn, cgi, ses, uri_path,
 			cookie_hdr);
 	}
+fprintf (stderr,"(req %s no match for pseudo %s)\n", uri_path, burl_url);
 	// note: zxid_is_wsp == do zxid_mini_httpd_wsp_response
 fprintf (stderr,"ha! got here!\n");
 	if (zx_match(cf->wsp_pat, uri_path)) {
