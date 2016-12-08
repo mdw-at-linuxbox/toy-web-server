@@ -24,7 +24,7 @@ set_property(TARGET civetweb_common_objs
 	APPEND PROPERTY COMPILE_DEFINITIONS
 		USE_IPV6=1 NO_SSL_DL=1)
 
-set(myhttpd_srcs m.c z.c $<TARGET_OBJECTS:civetweb_common_objs>)
+set(myhttpd_srcs m.c p.c z.c $<TARGET_OBJECTS:civetweb_common_objs>)
 add_executable(myhttpd ${myhttpd_srcs})
 target_include_directories(myhttpd PRIVATE
 	"${CMAKE_SOURCE_DIR}/civetweb/include")

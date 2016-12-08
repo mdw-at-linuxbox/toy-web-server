@@ -25,6 +25,7 @@
 #include "civetweb.h"
 
 #include "p.h"
+#include "m.h"
 #include "z.h"
 
 int j;
@@ -56,19 +57,26 @@ zxid_mini_httpd_process_zxid_simple_outcome(zxid_conf *cf,
 	char timebuf[80];
 
 	my_gmt_time_string(timebuf, sizeof timebuf, NULL);
-
 	if (cookie_hdr && *cookie_hdr)
 		append_postdata_format(&headers, "Set-Cookie: %s\r\n", cookie_hdr);
 	switch(*request_data) {
 	case 'L':
 		status = 302;
 		append_postdata_format(&output, "SAML Redirect\r\n");
-		if (ses->setcookie) {
-			append_postdata_format(&headers, "Set-Cookie: %s\r\n", ses->setcookie);
-		}
-		if (ses->setptmcookie) {
-			append_postdata_format(&headers, "Set-Cookie: %s\r\n", ses->setptmcookie);
-		}
+		p = strchr(request_data, '\r');
+		if (p) {
+			request_data_len = p-request_data;
+while (*++p) switch(*p) {
+case '\r':
+case '\n':
+break;
+default:
+fprintf(stderr,"Huh?  L: %d/%#o\n", p-request_data, *p);
+}
+		} else
+			request_data_len = strlen(request_data);
+fprintf(stderr,"Case L - <%.*s>\n", request_data_len, request_data);
+		append_postdata(&headers, request_data, request_data_len);
 		break;
 	case 'C':
 		fprintf(stderr,"request_data - case C: %s\n", request_data);
@@ -98,9 +106,15 @@ fprintf(stderr,"About to strtol: %.8s\n", p);
 		append_postdata_format(&output, "Server Fault\r\n");
 	}
 
-	append_postdata_format(&headers, "HTTP/1.1 %d %s\r\n",
+	prefix_postdata_format(&headers, "HTTP/1.1 %d %s\r\n",
 		status,
 		my_get_response_code_text(status));
+	if (ses->setcookie) {
+		append_postdata_format(&headers, "Set-Cookie: %s\r\n", ses->setcookie);
+	}
+	if (ses->setptmcookie) {
+		append_postdata_format(&headers, "Set-Cookie: %s\r\n", ses->setptmcookie);
+	}
 	append_postdata_format(&headers, "Date: %s\r\n", timebuf);
 	append_postdata_format(&headers, "Content-Length: %d\r\n",
 		compute_postdata_len(output));

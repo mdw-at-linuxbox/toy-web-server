@@ -10,6 +10,7 @@
 #include "civetweb.h"
 
 #include "p.h"
+#include "m.h"
 #include <openssl/evp.h>
 #include "zx/zxid.h"
 #include "z.h"
@@ -23,73 +24,11 @@ struct myconn_data {
 	zxid_conf *cf;
 };
 
-char *zxid_confstr = "PATH=/tmp/zxid/&SSO_PAT=**&DEBUG=1";
+char *zxid_confstr = "PATH=/tmp/zxid/&SSO_PAT=/test-sp/**&DEBUG=1";
+char *portstr = "5080";
+char *certstr;
 
 int rc;
-
-void
-free_postdata(struct mybufs *postdata)
-{
-	struct mybufs *next;
-	for (; postdata; postdata = next) {
-		next = postdata->next;
-		free(postdata);
-	}
-}
-
-void
-append_postdata(struct mybufs **postdata, char *buf, int len)
-{
-	struct mybufs *thisp, **nextp;
-	int c;
-	thisp = 0;
-	for (nextp = postdata; *nextp; nextp = &thisp->next) {
-		if (!*nextp) break;
-		thisp = *nextp;
-	}
-	if (thisp && thisp->len < sizeof thisp->data) {
-		c = sizeof thisp->data - thisp->len;
-		if (c > len) c = len;
-		memcpy(thisp->data + thisp->len, buf, c);
-		thisp->len += c;
-		buf += c;
-		len -= c;
-	}
-	for (; len; buf += c, len -= c) {
-		thisp = malloc(sizeof *thisp);
-		memset(thisp, 0, sizeof *thisp);
-		c = len;
-		if (c > sizeof thisp->data) c = sizeof thisp->data;
-		memcpy(thisp->data, buf, c);
-		thisp->next = 0;
-		thisp->len = c;
-		*nextp = thisp;
-		nextp = &thisp->next;
-	}
-}
-
-void
-append_postdata_format(struct mybufs **postdata, char *fmt, ...)
-{
-	char buf[65536];
-	va_list ap;
-	va_start(ap, fmt);
-	vsnprintf(buf, sizeof buf, fmt, ap);
-	va_end(ap);
-	append_postdata(postdata, buf, strlen(buf));
-}
-
-int
-compute_postdata_len(struct mybufs *postdata)
-{
-	struct mybufs *thisp;
-	int r;
-	r = 0;
-	for (thisp = postdata; thisp; thisp = thisp->next) {
-		r += thisp->len;
-	}
-	return r;
-}
 
 void
 copy_postdata_to_mg(struct mg_connection *conn, struct mybufs *postdata)
@@ -117,18 +56,6 @@ void copy_postdata_to_buf(char *buf, int buflen, struct mybufs *postdata)
 		buf += l;
 		buflen -= l;
 	}
-}
-
-void
-my_gmt_time_string(char *buf, int len, time_t *t)
-{
-	time_t x;
-	if (!t) {
-		x = time(0);
-		t = &x;
-	}
-	struct tm *tm = gmtime(t);
-	strftime(buf, len, "%a, %d %b %Y %H:%M:%S GMT", tm);
 }
 
 void
@@ -381,6 +308,14 @@ my_begin_request(struct mg_connection *conn)
 			break;
 		}
 	}
+	if (!memcmp(req_info->uri, "/test/printenv", 14)) {
+		switch (req_info->uri[14]) {
+		case '/': case 0:
+			return printenv(conn, req_info, cdata, postdata);
+		default:
+			break;
+		}
+	}
 	free_postdata(postdata);
 	return 0;
 }
@@ -431,7 +366,10 @@ int process()
 	*cpp++ = "enable_keep_alive", *cpp++ = "yes";
 	*cpp++ = "validate_http_method", *cpp++ = "no";
 	*cpp++ = "canonicalize_url_path", *cpp++ = "no";
-	*cpp++ = "listening_ports", *cpp++ = "5080";
+	*cpp++ = "listening_ports", *cpp++ = portstr;
+	if (certstr) {
+		*cpp++ = "ssl_certificate", *cpp++ = certstr;
+	}
 	*cpp = 0;
 
 	ctx = mg_start(cb, ud, (const char **) options);
@@ -441,7 +379,7 @@ int process()
 	return rc;
 }
 
-char usage[] = "Usage: myhttpd [-z confstr]\n";
+char usage[] = "Usage: myhttpd [-z confstr] [-p N,Ns] [-c cert_key.pem]\n";
 
 int
 main(int ac, char **av)
@@ -451,9 +389,26 @@ main(int ac, char **av)
 	while (--ac) if(*(ap = *++av) == '-')
 	while (*++ap) switch(*ap)
 	{
+	case 'c':
+		if (ac < 1) {
+			fprintf(stderr,"myhttpd: -c: missing option\n");
+			goto Usage;
+		}
+		--ac;
+		certstr = *++av;
+		break;
+	case 'p':
+		if (ac < 1) {
+			fprintf(stderr,"myhttpd: -p: missing option\n");
+			goto Usage;
+		}
+		--ac;
+		portstr = *++av;
+		break;
 	case 'z':
 		if (ac < 1) {
 			fprintf(stderr,"myhttpd: -z: missing option\n");
+			goto Usage;
 		}
 		--ac;
 		zxid_confstr = *++av;
