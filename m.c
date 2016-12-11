@@ -11,6 +11,7 @@
 
 #include "p.h"
 #include "m.h"
+#include "s.h"
 #include <openssl/evp.h>
 #include "zx/zxid.h"
 #include "z.h"
@@ -21,7 +22,7 @@ struct myhttpd_data {
 
 struct myconn_data {
 	zxid_ses *ses;
-	zxid_conf *cf;
+	zxid_conf cf[1];
 };
 
 char *zxid_confstr = "PATH=/tmp/zxid/&SSO_PAT=/test-sp/**&DEBUG=1";
@@ -250,6 +251,40 @@ read_postdata(struct mybufs **outp, struct mg_connection *conn)
 	}
 }
 
+struct s_store *cur_store;
+
+void * my_memory_reallocator(void *p, size_t n)
+{
+	char *r;
+	int oldn;
+
+	if (p) {
+		r = p;
+		r -= 16;
+		oldn = *((int *)r);
+	}
+	n += 16;
+	char *new = my_s_alloc(cur_store, n);
+	if (!new) {
+		return 0;
+	}
+	*((int *)new) = n;
+	if (p) {
+		if (n > oldn) n = oldn;
+		memcpy(new+16, r+16, n - 16);
+	}
+	return new+16;
+}
+
+void * my_memory_allocator(size_t n)
+{
+	return my_memory_reallocator(0, n);
+}
+
+void my_memory_free(void *p)
+{
+}
+
 int
 my_begin_request(struct mg_connection *conn)
 {
@@ -269,8 +304,16 @@ my_begin_request(struct mg_connection *conn)
 		mg_set_user_connection_data(conn, cdata);
 	}
 
-	if (!cdata->cf) {
-		cdata->cf = zxid_new_conf_to_cf(zxid_confstr);
+	if (cdata->cf->ctx) {
+		/* zxid_new_conf_to_cf - can't use, want
+			custom memory allocator.
+		*/
+		cdata->cf->ctx = zx_init_ctx();
+		cdata->cf->ctx->malloc_func = my_memory_allocator;
+		cdata->cf->ctx->realloc_func = my_memory_reallocator;
+		cdata->cf->ctx->free_func = my_memory_free;
+		zxid_conf_to_cf_len(cdata->cf, -1, zxid_confstr);
+//		cdata->cf = zxid_new_conf_to_cf(zxid_confstr);
 	}
 
 	fprintf (stdout, "method: %s\n", req_info->request_method);

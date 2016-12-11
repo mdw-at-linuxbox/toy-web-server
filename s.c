@@ -1,0 +1,47 @@
+#include <stdlib.h>
+#include <string.h>
+#include "s.h"
+
+void *
+my_s_alloc(struct s_store *store, int size)
+{
+	void *r;
+	size = ((size + SALIGN) & ~SALIGN);
+	if (store->s_left < size) {
+		struct s_segment *next;
+		int ns;
+		ns = size + ((sizeof *next) - MINSDATA);
+		if (ns < sizeof *next) ns = sizeof *next;
+		ns = (ns + SALIGN2) & ~SALIGN2;
+		next = malloc(ns);
+		next->s_next = store->s_first;
+		store->s_first = next;
+		store->s_next = next->s_data;
+		store->s_left = ns - ((sizeof *next) - MINSDATA);
+	}
+	r = store->s_next;
+	store->s_left -= size;
+	store->s_next += size;
+	return r;
+}
+
+void
+my_s_free(void *p)
+{
+}
+
+void
+my_s_release(struct s_store *store)
+{
+	struct s_segment *s, *next;
+	for (s = store->s_first; s; s = next) {
+		next = s->s_next;
+		free(s);
+	}
+	memset(store, 0, sizeof *store);
+}
+
+void my_s_init(struct s_store *store)
+{
+	memset(store, 0, sizeof *store);
+}
