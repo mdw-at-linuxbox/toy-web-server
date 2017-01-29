@@ -18,6 +18,7 @@ my_s_alloc(struct s_store *store, int size)
 		store->s_first = next;
 		store->s_next = next->s_data;
 		store->s_left = ns - ((sizeof *next) - MINSDATA);
+		next->s_size = ns;
 	}
 	r = store->s_next;
 	store->s_left -= size;
@@ -36,6 +37,7 @@ my_s_release(struct s_store *store)
 	struct s_segment *s, *next;
 	for (s = store->s_first; s; s = next) {
 		next = s->s_next;
+		memset(s, 0xaa, s->s_size);
 		free(s);
 	}
 	memset(store, 0, sizeof *store);

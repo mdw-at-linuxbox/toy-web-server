@@ -31,15 +31,16 @@
 int j;
 
 int
-zxid_mini_httpd_read_post(struct mybufs *postdata, char **outp)
+zxid_mini_httpd_read_post(zxid_conf * cf, struct mybufs *postdata, char **outp)
 {
 	char *buf;
 	char *cp;
 	int len;
 
-	cp = malloc(1 + (len = compute_postdata_len(postdata)));
+	cp = zx_alloc(cf->ctx, 1 + (len = compute_postdata_len(postdata)));
 	copy_postdata_to_buf(cp, len, postdata);
 	cp[len] = 0;
+	*outp = cp;
 	return len;
 }
 
@@ -75,7 +76,7 @@ fprintf(stderr,"Huh?  L: %d/%#o\n", p-request_data, *p);
 }
 		} else
 			request_data_len = strlen(request_data);
-fprintf(stderr,"Case L - <%.*s>\n", request_data_len, request_data);
+if (Dflag) fprintf(stderr,"Case L - <%.*s>\n", request_data_len, request_data);
 		append_postdata(&headers, request_data, request_data_len);
 		break;
 	case 'C':
@@ -87,7 +88,7 @@ fprintf(stderr,"Case L - <%.*s>\n", request_data_len, request_data);
 		p += 2;
 		content_type_len = p - content_type;
 		p += 16;		/* "skip Content-Length:" */
-fprintf(stderr,"About to strtol: %.8s\n", p);
+if (Dflag) fprintf(stderr,"About to strtol: %.8s\n", p);
 		request_data_len = strtol(p, &ep, 10);
 		request_data = strchr(p, '\r');
 		if (!request_data)
@@ -97,7 +98,7 @@ fprintf(stderr,"About to strtol: %.8s\n", p);
 		status = 200;
 		break;
 	case 'z':
-		fprintf(stderr,"request_data - case z: %s\n", request_data);
+if (Dflag) fprintf(stderr,"request_data - case z: %s\n", request_data);
 		goto E501;
 	E501:
 	default:
@@ -119,7 +120,7 @@ fprintf(stderr,"About to strtol: %.8s\n", p);
 	append_postdata_format(&headers, "Content-Length: %d\r\n",
 		compute_postdata_len(output));
 	if (content_type) {
-fprintf(stderr,"Custom content_type: %d<%.*s>\n",
+if (Dflag) fprintf(stderr,"Custom content_type: %d<%.*s>\n",
 content_type_len, content_type_len, content_type);
 		append_postdata(&headers, content_type, content_type_len);
 	} else {
@@ -219,9 +220,9 @@ zxid_mini_httpd_filter(zxid_conf * cf,
 	burl_url_len = cp - burl_url;
 	uri_len = strlen(uri_path);
 	if (uri_len == burl_url_len && !memcmp(burl_url, uri_path, uri_len)) {
-fprintf (stderr,"matching zxid pseudo node\n");
+if (Dflag) fprintf (stderr,"matching zxid pseudo node\n");
 		if (*method == 'P') {
-			request_data_len = zxid_mini_httpd_read_post(postdata,
+			request_data_len = zxid_mini_httpd_read_post(cf, postdata,
 				&request_data);
 			if (cgi->op == 'S') {
 				r = zxid_sp_soap_parse(cf, cgi, ses,
@@ -249,9 +250,9 @@ zxid_mini_httpd_process_zxid_simple_outcome(cf, conn,
 		return zxid_mini_httpd_step_up(cf, conn, cgi, ses, uri_path,
 			cookie_hdr);
 	}
-fprintf (stderr,"(req %s no match for pseudo %s)\n", uri_path, burl_url);
+if (Dflag) fprintf (stderr,"(req %s no match for pseudo %s)\n", uri_path, burl_url);
 	// note: zxid_is_wsp == do zxid_mini_httpd_wsp_response
-fprintf (stderr,"ha! got here!\n");
+if (Dflag) fprintf (stderr,"ha! got here!\n");
 	if (zx_match(cf->wsp_pat, uri_path)) {
 	}
 	// zxid_mini_httpd_wsp
@@ -274,7 +275,7 @@ zxid_mini_httpd_process_zxid_simple_outcome(cf, conn,
 		return zxid_mini_httpd_step_up(cf, conn, cgi, ses, uri_path,
 			cookie_hdr);
 	} else {
-fprintf (stderr,"sso_path=<%s> uri_path=<%s>: no match\n", cf->sso_pat, uri_path);
+if (Dflag) fprintf (stderr,"sso_path=<%s> uri_path=<%s>: no match\n", cf->sso_pat, uri_path);
 		return 0;
 	}
 }

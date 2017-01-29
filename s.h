@@ -3,6 +3,7 @@
 #define SALIGN2 255
 struct s_segment {
 	struct s_segment *s_next;
+	int s_size;
 	char s_data[MINSDATA];
 };
 
