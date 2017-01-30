@@ -67,12 +67,18 @@ zxid_mini_httpd_process_zxid_simple_outcome(zxid_conf *cf,
 		p = strchr(request_data, '\r');
 		if (p) {
 			request_data_len = p-request_data;
+{ char *ltemp = 0, *lp;
 while (*++p) switch(*p) {
 case '\r':
 case '\n':
 break;
 default:
-fprintf(stderr,"Huh?  L: %d/%#o\n", p-request_data, *p);
+if (!ltemp) ltemp = lp = malloc(1024);
+if (*p >= 040 && *p < 0177) *lp++ = *p;
+else { sprintf (lp, "\\%040o", (unsigned char) *p); lp += strlen(lp); }
+// fprintf(stderr,"Huh?  L: %d/%#o\n", p-request_data, *p);
+}
+if (ltemp) fprintf(stderr,"Huh?  L: <%.*s>\n", (int)(lp-ltemp), ltemp);
 }
 		} else
 			request_data_len = strlen(request_data);
