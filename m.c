@@ -27,14 +27,21 @@ struct m_work {
 	struct s_store *store;
 };
 
-struct myhttpd_data {
+struct toyhttpd_data {
 	int foo;
 };
 
-struct myconn_data {
+struct toyconn_data {
 	zxid_ses *ses;
 	zxid_conf cf[1];
 	int foo[128];	/* paranoia */
+};
+
+struct toy_request {
+	struct mg_connection *conn;
+	struct mg_request_info const *req_info;
+	struct toyconn_data *cdata;
+	struct toybufs *postdata;
 };
 
 char *zxid_confstr = "PATH=/tmp/zxid/&SSO_PAT=/test-sp/**&DEBUG=1";
@@ -48,10 +55,10 @@ int rc;
 pthread_key_t local_store;
 
 void
-copy_postdata_to_mg(struct mg_connection *conn, struct mybufs *postdata)
+copy_postdata_to_mg(struct mg_connection *conn, struct toybufs *postdata)
 {
 	int sofar = 0;
-	struct mybufs *thisp;
+	struct toybufs *thisp;
 	int r;
 	for (thisp = postdata; thisp; thisp = thisp->next) {
 		r = mg_write(conn, thisp->data, thisp->len);
@@ -59,10 +66,10 @@ copy_postdata_to_mg(struct mg_connection *conn, struct mybufs *postdata)
 	}
 }
 
-void copy_postdata_to_buf(char *buf, int buflen, struct mybufs *postdata)
+void copy_postdata_to_buf(char *buf, int buflen, struct toybufs *postdata)
 {
 	int sofar = 0;
-	struct mybufs *thisp;
+	struct toybufs *thisp;
 	int r;
 	int l;
 	for (thisp = postdata; thisp; thisp = thisp->next) {
@@ -76,7 +83,7 @@ void copy_postdata_to_buf(char *buf, int buflen, struct mybufs *postdata)
 }
 
 void
-my_send_no_cache_header(struct mybufs **outp)
+my_send_no_cache_header(struct toybufs **outp)
 {
 	append_postdata_format(outp, "Cache-Control: no-cache, no-store, "
 		"must-revalidate, private, max-age=0\r\n"
@@ -159,18 +166,18 @@ escape_html_characters(char *buf, int len, const char *cp)
 }
 
 int
-printenv(struct mg_connection *conn,
-	struct mg_request_info const *req_info,
-	struct myconn_data *cdata,
-	struct mybufs *postdata)
+printenv(struct toy_request *myrequest)
 {
-	struct mybufs *output = 0, *headers = 0;
+	struct toybufs *output = 0, *headers = 0;
 	char timebuf[80];
 	char tempbuf[1024];
 	int status;
 	struct sockaddr *lsa;
+#define TOY_MAX_ENV 256
+	char *envp[TOY_MAX_ENV];
 
-	lsa = mg_get_local_addr(conn);
+	*envp = 0;
+	lsa = mg_get_local_addr(myrequest->conn);
 
 	my_gmt_time_string(timebuf, sizeof timebuf, NULL);
 	append_postdata_format(&output, "<!DOCTYPE html\r\n"
@@ -189,27 +196,43 @@ printenv(struct mg_connection *conn,
 		break;
 	}
 	append_postdata_format(&output, "REQUEST_METHOD=%s\r\n",
-		req_info->request_method);
+		myrequest->req_info->request_method);
 	append_postdata_format(&output, "REMOTE_PORT=%d\r\n",
-		req_info->remote_port);
-	escape_html_characters(tempbuf, sizeof tempbuf, req_info->request_uri);
+		myrequest->req_info->remote_port);
+	escape_html_characters(tempbuf, sizeof tempbuf, myrequest->req_info->request_uri);
 	append_postdata_format(&output, "REQUEST_URI=%s\r\n",
 		tempbuf);
-	escape_html_characters(tempbuf, sizeof tempbuf, req_info->local_uri);
+	escape_html_characters(tempbuf, sizeof tempbuf, myrequest->req_info->local_uri);
 	append_postdata_format(&output, "LOCAL_URI=%s\r\n",
 		tempbuf);
 	append_postdata_format(&output, "HTTPS=%s\r\n",
-		req_info->is_ssl ? "on" : "off");
-	if (req_info->query_string) {
-		escape_html_characters(tempbuf, sizeof tempbuf, req_info->query_string);
+		myrequest->req_info->is_ssl ? "on" : "off");
+	if (myrequest->req_info->query_string) {
+		escape_html_characters(tempbuf, sizeof tempbuf, myrequest->req_info->query_string);
 		append_postdata_format(&output, "QUERY_STRING=%s\r\n",
 			tempbuf);
 	}
+	if (myrequest->cdata->ses) {
+		int i, r;
+		char *remoteuser = 0;
+		r = zxid_pool2env(myrequest->cdata->cf, myrequest->cdata->ses,
+			envp, TOY_MAX_ENV-1, &remoteuser);
+		envp[r] = 0;
+		if (remoteuser) {
+			escape_html_characters(tempbuf, sizeof tempbuf, remoteuser);
+			append_postdata_format(&output, "REMOTE_USER=%s\r\n",
+				tempbuf);
+		}
+		for (i = 0; envp[i]; ++i) {
+			escape_html_characters(tempbuf, sizeof tempbuf, envp[i]);
+			append_postdata_format(&output, "%s\r\n", tempbuf);
+		}
+	}
 	append_postdata_format(&output, "</pre>\r\n");
-	if (postdata) {
+	if (myrequest->postdata) {
 		int sofar = 0;
-		struct mybufs *thisp;
-		for (thisp = postdata; thisp; thisp = thisp->next) {
+		struct toybufs *thisp;
+		for (thisp = myrequest->postdata; thisp; thisp = thisp->next) {
 			int r, s;
 			s = 0;
 			while (s < thisp->len) {
@@ -235,16 +258,16 @@ printenv(struct mg_connection *conn,
 	append_postdata_format(&headers, "Content-Type: %s\r\n",
 		"text/html; charset=ISO-8859-1");
 	append_postdata_format(&headers, "\r\n");
-	copy_postdata_to_mg(conn, headers);
-	copy_postdata_to_mg(conn, output);
+	copy_postdata_to_mg(myrequest->conn, headers);
+	copy_postdata_to_mg(myrequest->conn, output);
 	free_postdata(output);
 	free_postdata(headers);
-	free_postdata(postdata);
+	free_postdata(myrequest->postdata);
 	return status;
 }
 
 void
-read_postdata(struct mybufs **outp, struct mg_connection *conn)
+read_postdata(struct toybufs **outp, struct mg_connection *conn)
 {
 	struct mg_request_info const *req_info = mg_get_request_info(conn);
 	int i;
@@ -309,17 +332,18 @@ void my_memory_free(void *p)
 int
 my_begin_request(struct mg_connection *conn)
 {
-	struct mg_request_info const *req_info = mg_get_request_info(conn);
-	struct myhttpd_data *me = (struct myhttpd_data*)(req_info->user_data);
+	struct toyhttpd_data *me;
 	int i;
-	struct mybufs *postdata = 0;
-	zxid_ses *ses;
-	struct myconn_data *cdata;
 	void *p;
 	void *data;
 	struct m_work *work = 0;
 	int r = 0;
+	struct toy_request myrequest[1];
 
+	memset(myrequest, 0, sizeof *myrequest);
+	myrequest->conn = conn;
+	myrequest->req_info = mg_get_request_info(conn);
+	me = (struct toyhttpd_data*)(myrequest->req_info->user_data);
 	data = pthread_getspecific(local_store);
 	if (data) {
 		work = (struct m_work *) data;
@@ -334,50 +358,50 @@ my_begin_request(struct mg_connection *conn)
 	}
 	p = mg_get_user_connection_data(conn);
 	if (p) {
-		cdata = (struct myconn_data *) p;
+		myrequest->cdata = (struct toyconn_data *) p;
 	} else {
-		cdata = malloc(sizeof *cdata);
-if (Dflag) fprintf(stderr,"allocate cdata: %d => %#lx\n", (int)(sizeof *cdata), cdata);
-		memset(cdata, 0, sizeof *cdata);
-		memset(cdata->foo, 0xaa, sizeof cdata->foo);
-		mg_set_user_connection_data(conn, cdata);
+		myrequest->cdata = malloc(sizeof *myrequest->cdata);
+if (Dflag) fprintf(stderr,"allocate myrequest->cdata: %d => %#lx\n", (int)(sizeof *myrequest->cdata), myrequest->cdata);
+		memset(myrequest->cdata, 0, sizeof *myrequest->cdata);
+		memset(myrequest->cdata->foo, 0xaa, sizeof myrequest->cdata->foo);
+		mg_set_user_connection_data(conn, myrequest->cdata);
 	}
-if (Dflag) fprintf(stderr,"begin-request #0: %#lx [%x]\n", cdata, cdata->foo[0]);
+if (Dflag) fprintf(stderr,"begin-request #0: %#lx [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
 
-	if (!cdata->cf->ctx) {
+	if (!myrequest->cdata->cf->ctx) {
 		/* zxid_new_conf_to_cf - can't use, want
 			custom memory allocator.
 		*/
-		cdata->cf->ctx = zx_init_ctx();
+		myrequest->cdata->cf->ctx = zx_init_ctx();
 		if (sflag) {
-			cdata->cf->ctx->malloc_func = my_memory_allocator;
-			cdata->cf->ctx->realloc_func = my_memory_reallocator;
-			cdata->cf->ctx->free_func = my_memory_free;
+			myrequest->cdata->cf->ctx->malloc_func = my_memory_allocator;
+			myrequest->cdata->cf->ctx->realloc_func = my_memory_reallocator;
+			myrequest->cdata->cf->ctx->free_func = my_memory_free;
 		}
-if (Dflag) fprintf(stderr,"begin-request #92: %#lx [%x]\n", cdata, cdata->foo[0]);
-		zxid_conf_to_cf_len(cdata->cf, -1, zxid_confstr);
-//NO!		cdata->cf = zxid_new_conf_to_cf(zxid_confstr);
+if (Dflag) fprintf(stderr,"begin-request #92: %#lx [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
+		zxid_conf_to_cf_len(myrequest->cdata->cf, -1, zxid_confstr);
+//NO!		myrequest->cdata->cf = zxid_new_conf_to_cf(zxid_confstr);
 	}
-if (Dflag) fprintf(stderr,"begin-request #1: %#lx [%x]\n", cdata, cdata->foo[0]);
+if (Dflag) fprintf(stderr,"begin-request #1: %#lx [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
 
 	if (vflag) {
-		fprintf (stdout, "method: %s\n", req_info->request_method);
-		fprintf (stdout, "uri: %s\n", req_info->uri);
-		if (req_info->query_string)
-			fprintf (stdout, "qs: %s\n", req_info->query_string);
-		fprintf (stdout, "user: %s\n", req_info->remote_user);
-		for (i = 0; i < req_info->num_headers; ++i) {
+		fprintf (stdout, "method: %s\n", myrequest->req_info->request_method);
+		fprintf (stdout, "uri: %s\n", myrequest->req_info->uri);
+		if (myrequest->req_info->query_string)
+			fprintf (stdout, "qs: %s\n", myrequest->req_info->query_string);
+		fprintf (stdout, "user: %s\n", myrequest->req_info->remote_user);
+		for (i = 0; i < myrequest->req_info->num_headers; ++i) {
 			fprintf (stdout, "hd%d: %s=%s\n", i,
-				req_info->http_headers[i].name,
-				req_info->http_headers[i].value);
+				myrequest->req_info->http_headers[i].name,
+				myrequest->req_info->http_headers[i].value);
 		}
 	}
-	if (!strcmp(req_info->request_method, "POST")) {
-		read_postdata(&postdata, conn);
-		if (postdata) {
+	if (!strcmp(myrequest->req_info->request_method, "POST")) {
+		read_postdata(&myrequest->postdata, conn);
+		if (myrequest->postdata) {
 			int sofar = 0;
-			struct mybufs *thisp;
-			for (thisp = postdata; thisp; thisp = thisp->next) {
+			struct toybufs *thisp;
+			for (thisp = myrequest->postdata; thisp; thisp = thisp->next) {
 				fprintf (stdout, "dt%d-%d: %.*s\n",
 					sofar, sofar+thisp->len,
 					thisp->len, thisp->data);
@@ -385,33 +409,33 @@ if (Dflag) fprintf(stderr,"begin-request #1: %#lx [%x]\n", cdata, cdata->foo[0])
 			}
 		}
 	}
-if (Dflag) fprintf(stderr,"begin-request #2: %#lx [%x]\n", cdata, cdata->foo[0]);
-	r = zxid_mini_httpd_filter(cdata->cf, conn, postdata, &cdata->ses);
+if (Dflag) fprintf(stderr,"begin-request #2: %#lx [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
+	r = zxid_mini_httpd_filter(myrequest->cdata->cf, conn, myrequest->postdata, &myrequest->cdata->ses);
 	if (r)
 		goto Done;
-	if (!memcmp(req_info->uri, "/test-sp/printenv", 17)) {
-		switch (req_info->uri[17]) {
+	if (!memcmp(myrequest->req_info->uri, "/test-sp/printenv", 17)) {
+		switch (myrequest->req_info->uri[17]) {
 		case '/': case 0:
-if (Dflag) fprintf(stderr,"begin-request #3: %#lx [%x]\n", cdata, cdata->foo[0]);
-			r = printenv(conn, req_info, cdata, postdata);
+if (Dflag) fprintf(stderr,"begin-request #3: %#lx [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
+			r = printenv(myrequest);
 			goto Done;
 		default:
 			break;
 		}
 	}
-	if (!memcmp(req_info->uri, "/test/printenv", 14)) {
-		switch (req_info->uri[14]) {
+	if (!memcmp(myrequest->req_info->uri, "/test/printenv", 14)) {
+		switch (myrequest->req_info->uri[14]) {
 		case '/': case 0:
-if (Dflag) fprintf(stderr,"begin-request #4: %#lx [%x]\n", cdata, cdata->foo[0]);
-			r = printenv(conn, req_info, cdata, postdata);
+if (Dflag) fprintf(stderr,"begin-request #4: %#lx [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
+			r = printenv(myrequest);
 			goto Done;
 		default:
 			break;
 		}
 	}
 Done:
-	free_postdata(postdata);
-if (Dflag) fprintf(stderr,"begin-request #5: %#lx [%x]\n", cdata, cdata->foo[0]);
+	free_postdata(myrequest->postdata);
+if (Dflag) fprintf(stderr,"begin-request #5: %#lx [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
 	return r;
 }
 
@@ -419,11 +443,11 @@ void
 discard_connection_cdata(const struct mg_connection *conn)
 {
 	void *p;
-	struct myconn_data *cdata;
+	struct toyconn_data *cdata;
 	struct zx_ctx *ctx;
 	p = mg_get_user_connection_data(conn);
 	mg_set_user_connection_data(conn, NULL);
-	cdata = (struct myconn_data *) p;
+	cdata = (struct toyconn_data *) p;
 	if (!cdata) return;
 	curl_easy_cleanup(cdata->cf->curl);
 	cdata->cf->curl = 0;
@@ -504,7 +528,7 @@ static void local_destroy(void *data)
 int process()
 {
 	struct mg_context *ctx;
-	struct myhttpd_data ud[1];
+	struct toyhttpd_data ud[1];
 	char *options[40], **cpp;
 
 	cpp = options;

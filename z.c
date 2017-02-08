@@ -31,7 +31,28 @@
 int j;
 
 int
-zxid_mini_httpd_read_post(zxid_conf * cf, struct mybufs *postdata, char **outp)
+pretty_print_expand(char *cp, int len, char *buf, int buflen)
+{
+	int l, r;
+	char *p;
+	char lp[30];
+	r = len;
+	for (p = cp; --len >= 0; ++p) {
+		if (buflen < 1) ;
+		else if (*p >= 040 && *p < 0177) --buflen, *buf++ = *p;
+		else {
+			sprintf (lp, "\\%040o", (unsigned char) *p);
+			l = strlen(lp); if (l > (buflen-1)) l=(buflen-1);
+			memcpy(buf, lp, l);
+			buflen -= l; buf += l;
+		}
+	}
+	if (buflen) *buf++ = 0;
+	return r;
+}
+
+int
+zxid_mini_httpd_read_post(zxid_conf * cf, struct toybufs *postdata, char **outp)
 {
 	char *buf;
 	char *cp;
@@ -50,7 +71,7 @@ zxid_mini_httpd_process_zxid_simple_outcome(zxid_conf *cf,
 	zxid_ses *ses, const char *uri_path, const char *cookie_hdr,
 	char *request_data)
 {
-	struct mybufs *output = 0, *headers = 0;
+	struct toybufs *output = 0, *headers = 0;
 	int status;
 	char *content_type = 0;
 	char *p, *ep;
@@ -58,35 +79,49 @@ zxid_mini_httpd_process_zxid_simple_outcome(zxid_conf *cf,
 	char timebuf[80];
 
 	my_gmt_time_string(timebuf, sizeof timebuf, NULL);
-	if (cookie_hdr && *cookie_hdr)
+	if (cookie_hdr && *cookie_hdr) {
+		if (Dflag) fprintf(stderr,"zmhpzso: cookie_hdr: %s\n", cookie_hdr);
 		append_postdata_format(&headers, "Set-Cookie: %s\r\n", cookie_hdr);
+	}
 	switch(*request_data) {
 	case 'L':
 		status = 302;
 		append_postdata_format(&output, "SAML Redirect\r\n");
+		request_data_len = strlen(request_data);
+#if 0
 		p = strchr(request_data, '\r');
 		if (p) {
 			request_data_len = p-request_data;
-{ char *ltemp = 0, *lp;
+{ char *ltemp = 0;
+char *savedp, *p1 = 0; int r;
+savedp = p;
 while (*++p) switch(*p) {
 case '\r':
 case '\n':
 break;
 default:
-if (!ltemp) ltemp = lp = malloc(1024);
-if (*p >= 040 && *p < 0177) *lp++ = *p;
-else { sprintf (lp, "\\%040o", (unsigned char) *p); lp += strlen(lp); }
-// fprintf(stderr,"Huh?  L: %d/%#o\n", p-request_data, *p);
+if (!p1) p1 = p;
 }
-if (ltemp) fprintf(stderr,"Huh?  L: <%.*s>\n", (int)(lp-ltemp), ltemp);
+if (p1) {
+ltemp = malloc(1024);
+r = pretty_print_expand(p1, p-p1, ltemp, 1024);
+fprintf(stderr,"zmhpzso: Huh?  L: %d<%s>\n", r, ltemp);
+}
+fprintf(stderr,"zmhpzso: zero %lx/%d\n", savedp, p-savedp);
+memset(savedp, 'X', p-savedp);
 }
 		} else
 			request_data_len = strlen(request_data);
-if (Dflag) fprintf(stderr,"Case L - <%.*s>\n", request_data_len, request_data);
+if (Dflag) {
+char ltemp[1024];
+pretty_print_expand(request_data, request_data_len, ltemp, sizeof ltemp);
+fprintf(stderr,"zmhpzso: Case L - <%s>\n", ltemp);
+}
+#endif
 		append_postdata(&headers, request_data, request_data_len);
 		break;
 	case 'C':
-		fprintf(stderr,"request_data - case C: %s\n", request_data);
+		fprintf(stderr,"zmhpzso: request_data - case C: %s\n", request_data);
 		content_type = request_data;
 		request_data += 14;	/* "skip Content-Type:" */
 		p = strchr(request_data, '\r');
@@ -94,7 +129,7 @@ if (Dflag) fprintf(stderr,"Case L - <%.*s>\n", request_data_len, request_data);
 		p += 2;
 		content_type_len = p - content_type;
 		p += 16;		/* "skip Content-Length:" */
-if (Dflag) fprintf(stderr,"About to strtol: %.8s\n", p);
+if (Dflag) fprintf(stderr,"zmhpzso: About to strtol: %.8s\n", p);
 		request_data_len = strtol(p, &ep, 10);
 		request_data = strchr(p, '\r');
 		if (!request_data)
@@ -104,10 +139,14 @@ if (Dflag) fprintf(stderr,"About to strtol: %.8s\n", p);
 		status = 200;
 		break;
 	case 'z':
-if (Dflag) fprintf(stderr,"request_data - case z: %s\n", request_data);
+if (Dflag) fprintf(stderr,"zmhpzso: request_data - case z: %s\n", request_data);
 		goto E501;
-	E501:
+	case 0:	/* Logged in case */
+		// pool2apache(cf, r, ses.at);
+		return status;
 	default:
+if (Dflag) fprintf(stderr,"zmhpzso: request_data - ?unknown?: %s\n", request_data);
+	E501:
 		content_type = 0;
 		status = 501;
 		append_postdata_format(&output, "Server Fault\r\n");
@@ -126,7 +165,7 @@ if (Dflag) fprintf(stderr,"request_data - case z: %s\n", request_data);
 	append_postdata_format(&headers, "Content-Length: %d\r\n",
 		compute_postdata_len(output));
 	if (content_type) {
-if (Dflag) fprintf(stderr,"Custom content_type: %d<%.*s>\n",
+if (Dflag) fprintf(stderr,"zmhpzso: Custom content_type: %d<%.*s>\n",
 content_type_len, content_type_len, content_type);
 		append_postdata(&headers, content_type, content_type_len);
 	} else {
@@ -152,6 +191,7 @@ zxid_mini_httpd_step_up(zxid_conf *cf,
 	if (!ses)	// XXX can this happen?  should it be returned?
 		ses = zxid_alloc_ses(cf);
 	request_data = zxid_simple_no_ses_cf(cf, cgi, ses, 0, AUTO_FLAGS);
+if (Dflag) fprintf (stderr,"zmhsu: simple_outcome\n");
 	return zxid_mini_httpd_process_zxid_simple_outcome(cf, conn,
 		ses, uri_path, cookie_hdr,
 		request_data);
@@ -160,7 +200,7 @@ zxid_mini_httpd_step_up(zxid_conf *cf,
 int
 zxid_mini_httpd_filter(zxid_conf * cf,
 	struct mg_connection *conn,
-	struct mybufs *postdata,
+	struct toybufs *postdata,
 	zxid_ses**sessp)
 {
 	struct mg_request_info const *req_info = mg_get_request_info(conn);
@@ -226,7 +266,7 @@ zxid_mini_httpd_filter(zxid_conf * cf,
 	burl_url_len = cp - burl_url;
 	uri_len = strlen(uri_path);
 	if (uri_len == burl_url_len && !memcmp(burl_url, uri_path, uri_len)) {
-if (Dflag) fprintf (stderr,"matching zxid pseudo node\n");
+if (Dflag) fprintf (stderr,"zmhf: matching zxid pseudo node\n");
 		if (*method == 'P') {
 			request_data_len = zxid_mini_httpd_read_post(cf, postdata,
 				&request_data);
@@ -245,6 +285,7 @@ if (Dflag) fprintf (stderr,"matching zxid pseudo node\n");
 				ses, 0, AUTO_FLAGS);
 			if (!request_data)
 				break;
+if (Dflag) fprintf (stderr,"zmhf: case #1 simple_outcome\n");
 			return
 zxid_mini_httpd_process_zxid_simple_outcome(cf, conn,
 				ses, uri_path, cookie_hdr,
@@ -256,9 +297,9 @@ zxid_mini_httpd_process_zxid_simple_outcome(cf, conn,
 		return zxid_mini_httpd_step_up(cf, conn, cgi, ses, uri_path,
 			cookie_hdr);
 	}
-if (Dflag) fprintf (stderr,"(req %s no match for pseudo %s)\n", uri_path, burl_url);
+if (Dflag) fprintf (stderr,"zmhpzso: (req %s no match for pseudo %s)\n", uri_path, burl_url);
 	// note: zxid_is_wsp == do zxid_mini_httpd_wsp_response
-if (Dflag) fprintf (stderr,"ha! got here!\n");
+if (Dflag) fprintf (stderr,"zmhpzso: ha! got here!\n");
 	if (zx_match(cf->wsp_pat, uri_path)) {
 	}
 	// zxid_mini_httpd_wsp
@@ -272,6 +313,7 @@ if (Dflag) fprintf (stderr,"ha! got here!\n");
 			request_data = zxid_simple_ses_active_cf(cf, cgi,
 				ses, 0, AUTO_FLAGS);
 			if (request_data) {
+if (Dflag) fprintf (stderr,"zmhf: case #2 simple_outcome\n");
 				return
 zxid_mini_httpd_process_zxid_simple_outcome(cf, conn,
 					ses, uri_path, cookie_hdr,
@@ -281,7 +323,49 @@ zxid_mini_httpd_process_zxid_simple_outcome(cf, conn,
 		return zxid_mini_httpd_step_up(cf, conn, cgi, ses, uri_path,
 			cookie_hdr);
 	} else {
-if (Dflag) fprintf (stderr,"sso_path=<%s> uri_path=<%s>: no match\n", cf->sso_pat, uri_path);
+if (Dflag) fprintf (stderr,"zmhf: sso_path=<%s> uri_path=<%s>: no match\n", cf->sso_pat, uri_path);
 		return 0;
 	}
+}
+
+int zxid_pool2env(zxid_conf *cf, zxid_ses *ses, char **envp, int maxn, char **remoteuserp)
+{
+	struct zxid_map *map;
+	struct zxid_attr *at, *av;
+	char *name, *val;
+	int envn = 0;
+
+	for (at = ses->at; at; at = at->n) {
+		name = at->name;
+		val = at->val;
+		if (!strcmp(name, "idpnid") && val && strcmp(val, "-"))
+			*remoteuserp = val;
+		map = zxid_find_map(cf->outmap, at->name);
+		if (map) {
+			if (map->rule == ZXID_MAP_RULE_DEL) {
+				continue;
+			}
+			at->map_val = zxid_map_val(cf, 0, 0, map, at->name, at->val);
+			if (map->dst && *map->dst && map->src && map->src[0] != '*') {
+				name = map->dst;
+			}
+			val = at->map_val->s;
+		}
+		if (envn >= maxn) {
+		TooMany:
+fprintf(stderr,"zp2e: too many envs(max=%d)\n", maxn);
+			goto Done;
+		}
+		envp[envn++] = zx_alloc_sprintf(cf->ctx, 0, "%s%s=%s",
+			cf->mod_saml_attr_prefix, name, val);
+		for (av = at->nv; av; av = av->n) {	/* multivalued */
+			av->map_val = zxid_map_val(cf, 0, 0, map, at->name, av->val);
+			if (envn >= maxn) goto TooMany;
+			envp[envn++] = zx_alloc_sprintf(cf->ctx, 0, "%s%s=%s",
+				cf->mod_saml_attr_prefix, name,
+				map ? av->map_val->s : av->val);
+		}
+	}
+Done:
+	return envn;
 }

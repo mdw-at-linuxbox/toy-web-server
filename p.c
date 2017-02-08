@@ -7,18 +7,18 @@
 #include "p.h"
 
 void
-free_postdata(struct mybufs *postdata)
+free_postdata(struct toybufs *postdata)
 {
-	struct mybufs *next;
+	struct toybufs *next;
 	for (; postdata; postdata = next) {
 		next = postdata->next;
 		free(postdata);
 	}
 }
 
-void prefix_postdata(struct mybufs **postdata, char *buf, int len)
+void prefix_postdata(struct toybufs **postdata, char *buf, int len)
 {
-	struct mybufs *oldp = *postdata, *thisp;
+	struct toybufs *oldp = *postdata, *thisp;
 
 	*postdata = 0;
 	append_postdata(postdata, buf, len);
@@ -29,9 +29,9 @@ void prefix_postdata(struct mybufs **postdata, char *buf, int len)
 }
 
 void
-append_postdata(struct mybufs **postdata, char *buf, int len)
+append_postdata(struct toybufs **postdata, char *buf, int len)
 {
-	struct mybufs *thisp, **nextp;
+	struct toybufs *thisp, **nextp;
 	int c;
 	thisp = 0;
 	for (nextp = postdata; *nextp; nextp = &thisp->next) {
@@ -60,7 +60,7 @@ append_postdata(struct mybufs **postdata, char *buf, int len)
 }
 
 void
-append_postdata_format(struct mybufs **postdata, char *fmt, ...)
+append_postdata_format(struct toybufs **postdata, char *fmt, ...)
 {
 	char buf[65536];
 	va_list ap;
@@ -71,7 +71,7 @@ append_postdata_format(struct mybufs **postdata, char *fmt, ...)
 }
 
 void
-prefix_postdata_format(struct mybufs **postdata, char *fmt, ...)
+prefix_postdata_format(struct toybufs **postdata, char *fmt, ...)
 {
 	char buf[65536];
 	va_list ap;
@@ -82,9 +82,9 @@ prefix_postdata_format(struct mybufs **postdata, char *fmt, ...)
 }
 
 int
-compute_postdata_len(struct mybufs *postdata)
+compute_postdata_len(struct toybufs *postdata)
 {
-	struct mybufs *thisp;
+	struct toybufs *thisp;
 	int r;
 	r = 0;
 	for (thisp = postdata; thisp; thisp = thisp->next) {
