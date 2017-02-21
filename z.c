@@ -54,7 +54,6 @@ pretty_print_expand(char *cp, int len, char *buf, int buflen)
 int
 zxid_mini_httpd_read_post(zxid_conf * cf, struct toybufs *postdata, char **outp)
 {
-	char *buf;
 	char *cp;
 	int len;
 
@@ -143,6 +142,7 @@ if (Dflag) fprintf(stderr,"zmhpzso: request_data - case z: %s\n", request_data);
 		goto E501;
 	case 0:	/* Logged in case */
 		// pool2apache(cf, r, ses.at);
+		status = 0;
 		return status;
 	default:
 if (Dflag) fprintf(stderr,"zmhpzso: request_data - ?unknown?: %s\n", request_data);
