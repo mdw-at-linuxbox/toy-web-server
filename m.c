@@ -57,7 +57,6 @@ pthread_key_t local_store;
 void
 copy_postdata_to_mg(struct mg_connection *conn, struct toybufs *postdata)
 {
-	int sofar = 0;
 	struct toybufs *thisp;
 	int r;
 	for (thisp = postdata; thisp; thisp = thisp->next) {
@@ -71,9 +70,7 @@ fprintf(stderr,"Only wrote %d of %d bytes!!!\n", r, thisp->len);
 
 void copy_postdata_to_buf(char *buf, int buflen, struct toybufs *postdata)
 {
-	int sofar = 0;
 	struct toybufs *thisp;
-	int r;
 	int l;
 	for (thisp = postdata; thisp; thisp = thisp->next) {
 		if (!buflen) break;
@@ -335,7 +332,7 @@ void my_memory_free(void *p)
 int
 my_begin_request(struct mg_connection *conn)
 {
-	struct toyhttpd_data *me;
+//	struct toyhttpd_data *me;
 	int i;
 	void *p;
 	void *data;
@@ -346,7 +343,7 @@ my_begin_request(struct mg_connection *conn)
 	memset(myrequest, 0, sizeof *myrequest);
 	myrequest->conn = conn;
 	myrequest->req_info = mg_get_request_info(conn);
-	me = (struct toyhttpd_data*)(myrequest->req_info->user_data);
+//	me = (struct toyhttpd_data*)(myrequest->req_info->user_data);
 	data = pthread_getspecific(local_store);
 	if (data) {
 		work = (struct m_work *) data;
@@ -364,12 +361,12 @@ my_begin_request(struct mg_connection *conn)
 		myrequest->cdata = (struct toyconn_data *) p;
 	} else {
 		myrequest->cdata = malloc(sizeof *myrequest->cdata);
-if (Dflag) fprintf(stderr,"allocate myrequest->cdata: %d => %#lx\n", (int)(sizeof *myrequest->cdata), myrequest->cdata);
+if (Dflag) fprintf(stderr,"allocate myrequest->cdata: %d => %p\n", (int)(sizeof *myrequest->cdata), myrequest->cdata);
 		memset(myrequest->cdata, 0, sizeof *myrequest->cdata);
 		memset(myrequest->cdata->foo, 0xaa, sizeof myrequest->cdata->foo);
 		mg_set_user_connection_data(conn, myrequest->cdata);
 	}
-if (Dflag) fprintf(stderr,"begin-request #0: %#lx [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
+if (Dflag) fprintf(stderr,"begin-request #0: %p [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
 
 	if (!myrequest->cdata->cf->ctx) {
 		/* zxid_new_conf_to_cf - can't use, want
@@ -381,11 +378,11 @@ if (Dflag) fprintf(stderr,"begin-request #0: %#lx [%x]\n", myrequest->cdata, myr
 			myrequest->cdata->cf->ctx->realloc_func = my_memory_reallocator;
 			myrequest->cdata->cf->ctx->free_func = my_memory_free;
 		}
-if (Dflag) fprintf(stderr,"begin-request #92: %#lx [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
+if (Dflag) fprintf(stderr,"begin-request #92: %p [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
 		zxid_conf_to_cf_len(myrequest->cdata->cf, -1, zxid_confstr);
 //NO!		myrequest->cdata->cf = zxid_new_conf_to_cf(zxid_confstr);
 	}
-if (Dflag) fprintf(stderr,"begin-request #1: %#lx [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
+if (Dflag) fprintf(stderr,"begin-request #1: %p [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
 
 	if (vflag) {
 		fprintf (stdout, "method: %s\n", myrequest->req_info->request_method);
@@ -412,14 +409,14 @@ if (Dflag) fprintf(stderr,"begin-request #1: %#lx [%x]\n", myrequest->cdata, myr
 			}
 		}
 	}
-if (Dflag) fprintf(stderr,"begin-request #2: %#lx [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
+if (Dflag) fprintf(stderr,"begin-request #2: %p [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
 	r = zxid_mini_httpd_filter(myrequest->cdata->cf, conn, myrequest->postdata, &myrequest->cdata->ses);
 	if (r)
 		goto Done;
 	if (!memcmp(myrequest->req_info->uri, "/test-sp/printenv", 17)) {
 		switch (myrequest->req_info->uri[17]) {
 		case '/': case 0:
-if (Dflag) fprintf(stderr,"begin-request #3: %#lx [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
+if (Dflag) fprintf(stderr,"begin-request #3: %p [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
 			r = printenv(myrequest);
 			goto Done;
 		default:
@@ -429,7 +426,7 @@ if (Dflag) fprintf(stderr,"begin-request #3: %#lx [%x]\n", myrequest->cdata, myr
 	if (!memcmp(myrequest->req_info->uri, "/test/printenv", 14)) {
 		switch (myrequest->req_info->uri[14]) {
 		case '/': case 0:
-if (Dflag) fprintf(stderr,"begin-request #4: %#lx [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
+if (Dflag) fprintf(stderr,"begin-request #4: %p [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
 			r = printenv(myrequest);
 			goto Done;
 		default:
@@ -438,7 +435,7 @@ if (Dflag) fprintf(stderr,"begin-request #4: %#lx [%x]\n", myrequest->cdata, myr
 	}
 Done:
 	free_postdata(myrequest->postdata);
-if (Dflag) fprintf(stderr,"begin-request #5: %#lx [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
+if (Dflag) fprintf(stderr,"begin-request #5: %p [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
 	return r;
 }
 
@@ -461,7 +458,7 @@ discard_connection_cdata(const struct mg_connection *conn)
 	if (cdata) {
 		ctx = cdata->cf->ctx;
 		zxid_free_conf(cdata->cf);
-if (Dflag) fprintf(stderr,"free cdata: %#lx [%x]\n", cdata, cdata->foo[0]);
+if (Dflag) fprintf(stderr,"free cdata: %p [%x]\n", cdata, cdata->foo[0]);
 		memset(cdata, 0xaa, sizeof *cdata);
 		free(cdata);
 		if (ctx)
@@ -510,11 +507,11 @@ my_close_connection(const struct mg_connection *conn)
 }
 
 struct mg_callbacks cb[1] = {{
-	begin_request: my_begin_request,
-	log_message: my_log_message,
-	log_access: my_log_access,
-	connection_close: my_close_connection,
-	end_request: my_end_request,
+	.begin_request = my_begin_request,
+	.log_message = my_log_message,
+	.log_access = my_log_access,
+	.connection_close = my_close_connection,
+	.end_request = my_end_request,
 }};
 
 static void local_destroy(void *data)
