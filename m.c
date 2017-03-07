@@ -361,12 +361,12 @@ my_begin_request(struct mg_connection *conn)
 		myrequest->cdata = (struct toyconn_data *) p;
 	} else {
 		myrequest->cdata = malloc(sizeof *myrequest->cdata);
-if (Dflag) fprintf(stderr,"allocate myrequest->cdata: %d => %p\n", (int)(sizeof *myrequest->cdata), myrequest->cdata);
+if (Dflag) fprintf(stderr,"allocate myrequest->cdata: %d => %p\n", (int)(sizeof *myrequest->cdata), (void*)myrequest->cdata);
 		memset(myrequest->cdata, 0, sizeof *myrequest->cdata);
 		memset(myrequest->cdata->foo, 0xaa, sizeof myrequest->cdata->foo);
 		mg_set_user_connection_data(conn, myrequest->cdata);
 	}
-if (Dflag) fprintf(stderr,"begin-request #0: %p [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
+if (Dflag) fprintf(stderr,"begin-request #0: %p [%x]\n", (void*)myrequest->cdata, myrequest->cdata->foo[0]);
 
 	if (!myrequest->cdata->cf->ctx) {
 		/* zxid_new_conf_to_cf - can't use, want
@@ -382,7 +382,7 @@ if (Dflag) fprintf(stderr,"begin-request #92: %p [%x]\n", myrequest->cdata, myre
 		zxid_conf_to_cf_len(myrequest->cdata->cf, -1, zxid_confstr);
 //NO!		myrequest->cdata->cf = zxid_new_conf_to_cf(zxid_confstr);
 	}
-if (Dflag) fprintf(stderr,"begin-request #1: %p [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
+if (Dflag) fprintf(stderr,"begin-request #1: %p [%x]\n", (void*)myrequest->cdata, myrequest->cdata->foo[0]);
 
 	if (vflag) {
 		fprintf (stdout, "method: %s\n", myrequest->req_info->request_method);
@@ -409,14 +409,14 @@ if (Dflag) fprintf(stderr,"begin-request #1: %p [%x]\n", myrequest->cdata, myreq
 			}
 		}
 	}
-if (Dflag) fprintf(stderr,"begin-request #2: %p [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
+if (Dflag) fprintf(stderr,"begin-request #2: %p [%x]\n", (void*)myrequest->cdata, myrequest->cdata->foo[0]);
 	r = zxid_mini_httpd_filter(myrequest->cdata->cf, conn, myrequest->postdata, &myrequest->cdata->ses);
 	if (r)
 		goto Done;
 	if (!memcmp(myrequest->req_info->uri, "/test-sp/printenv", 17)) {
 		switch (myrequest->req_info->uri[17]) {
 		case '/': case 0:
-if (Dflag) fprintf(stderr,"begin-request #3: %p [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
+if (Dflag) fprintf(stderr,"begin-request #3: %p [%x]\n", (void*)myrequest->cdata, myrequest->cdata->foo[0]);
 			r = printenv(myrequest);
 			goto Done;
 		default:
@@ -426,7 +426,7 @@ if (Dflag) fprintf(stderr,"begin-request #3: %p [%x]\n", myrequest->cdata, myreq
 	if (!memcmp(myrequest->req_info->uri, "/test/printenv", 14)) {
 		switch (myrequest->req_info->uri[14]) {
 		case '/': case 0:
-if (Dflag) fprintf(stderr,"begin-request #4: %p [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
+if (Dflag) fprintf(stderr,"begin-request #4: %p [%x]\n", (void*)myrequest->cdata, myrequest->cdata->foo[0]);
 			r = printenv(myrequest);
 			goto Done;
 		default:
@@ -435,7 +435,7 @@ if (Dflag) fprintf(stderr,"begin-request #4: %p [%x]\n", myrequest->cdata, myreq
 	}
 Done:
 	free_postdata(myrequest->postdata);
-if (Dflag) fprintf(stderr,"begin-request #5: %p [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
+if (Dflag) fprintf(stderr,"begin-request #5: %p [%x]\n", (void*)myrequest->cdata, myrequest->cdata->foo[0]);
 	return r;
 }
 
@@ -458,7 +458,7 @@ discard_connection_cdata(const struct mg_connection *conn)
 	if (cdata) {
 		ctx = cdata->cf->ctx;
 		zxid_free_conf(cdata->cf);
-if (Dflag) fprintf(stderr,"free cdata: %p [%x]\n", cdata, cdata->foo[0]);
+if (Dflag) fprintf(stderr,"free cdata: %p [%x]\n", (void*)cdata, cdata->foo[0]);
 		memset(cdata, 0xaa, sizeof *cdata);
 		free(cdata);
 		if (ctx)
