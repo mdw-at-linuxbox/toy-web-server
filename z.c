@@ -41,7 +41,7 @@ pretty_print_expand(char *cp, int len, char *buf, int buflen)
 		if (buflen < 1) ;
 		else if (*p >= 040 && *p < 0177) --buflen, *buf++ = *p;
 		else {
-			sprintf (lp, "\\%040o", (unsigned char) *p);
+			sprintf (lp, "\\%03o", (unsigned char) *p);
 			l = strlen(lp); if (l > (buflen-1)) l=(buflen-1);
 			memcpy(buf, lp, l);
 			buflen -= l; buf += l;
@@ -87,6 +87,25 @@ zxid_mini_httpd_process_zxid_simple_outcome(zxid_conf *cf,
 		status = 302;
 		append_postdata_format(&output, "SAML Redirect\r\n");
 		request_data_len = strlen(request_data);
+		for (p = request_data, ep = p + request_data_len; p < ep; ++p) {
+			p = memchr(p, '\r', ep-p);
+			if (!p) break;
+			if (ep-p < 2) break;
+			if (memcmp(p, "\r\n", 2))
+				continue;
+			p += 2;
+			if (ep-p < 2) break;
+			if (!memcmp(p, "\r\n", 2)) {
+				request_data_len = p - request_data;
+				p += 2;
+				if (ep > p) {
+char ltemp[256];
+pretty_print_expand(p, ep-p, ltemp, sizeof ltemp);
+fprintf(stderr,"Discarding case L unexpected data: <%s>\n", ltemp);
+				}
+				break;
+			}
+		}
 #if 0
 		p = strchr(request_data, '\r');
 		if (p) {
@@ -102,8 +121,8 @@ default:
 if (!p1) p1 = p;
 }
 if (p1) {
-ltemp = malloc(1024);
-r = pretty_print_expand(p1, p-p1, ltemp, 1024);
+ltemp = malloc(8192);
+r = pretty_print_expand(p1, p-p1, ltemp, 8192);
 fprintf(stderr,"zmhpzso: Huh?  L: %d<%s>\n", r, ltemp);
 }
 fprintf(stderr,"zmhpzso: zero %lx/%d\n", savedp, p-savedp);
@@ -111,12 +130,12 @@ memset(savedp, 'X', p-savedp);
 }
 		} else
 			request_data_len = strlen(request_data);
-if (Dflag) {
-char ltemp[1024];
-pretty_print_expand(request_data, request_data_len, ltemp, sizeof ltemp);
-fprintf(stderr,"zmhpzso: Case L - <%s>\n", ltemp);
-}
 #endif
+// if (Dflag) {
+// char ltemp[8192];
+// pretty_print_expand(request_data, request_data_len, ltemp, sizeof ltemp);
+// fprintf(stderr,"zmhpzso: Case L - <%s>\n", ltemp);
+// }
 		append_postdata(&headers, request_data, request_data_len);
 		break;
 	case 'C':
@@ -174,6 +193,19 @@ content_type_len, content_type_len, content_type);
 	}
 	append_postdata_format(&headers, "\r\n");
 	copy_postdata_to_mg(conn, headers);
+#if 0
+if (Dflag) {
+int len = compute_postdata_len(headers);
+char *buf = malloc(1 + len);
+char *buf2 = malloc((len+5)*20);
+copy_postdata_to_buf(buf, len, headers);
+buf[len] = 0;
+pretty_print_expand(buf, len, buf2, (len+5)*20);
+fprintf(stderr,"Output headers: %d<%s>\n", len, buf2);
+free(buf);
+free(buf2);
+}
+#endif
 	copy_postdata_to_mg(conn, output);
 	free_postdata(output);
 	free_postdata(headers);
