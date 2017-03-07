@@ -63,6 +63,9 @@ copy_postdata_to_mg(struct mg_connection *conn, struct toybufs *postdata)
 	for (thisp = postdata; thisp; thisp = thisp->next) {
 		r = mg_write(conn, thisp->data, thisp->len);
 		if (r <= 0) break;
+		if (r != thisp->len) {
+fprintf(stderr,"Only wrote %d of %d bytes!!!\n", r, thisp->len);
+		}
 	}
 }
 
