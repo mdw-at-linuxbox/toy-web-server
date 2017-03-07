@@ -378,7 +378,7 @@ if (Dflag) fprintf(stderr,"begin-request #0: %p [%x]\n", (void*)myrequest->cdata
 			myrequest->cdata->cf->ctx->realloc_func = my_memory_reallocator;
 			myrequest->cdata->cf->ctx->free_func = my_memory_free;
 		}
-if (Dflag) fprintf(stderr,"begin-request #92: %p [%x]\n", myrequest->cdata, myrequest->cdata->foo[0]);
+if (Dflag) fprintf(stderr,"begin-request #92: %p [%x]\n", (void*)myrequest->cdata, myrequest->cdata->foo[0]);
 		zxid_conf_to_cf_len(myrequest->cdata->cf, -1, zxid_confstr);
 //NO!		myrequest->cdata->cf = zxid_new_conf_to_cf(zxid_confstr);
 	}
